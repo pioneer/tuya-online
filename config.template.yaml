@@ -1,0 +1,31 @@
+# Configuration Template for Tuya Power Monitor
+# Copy this file to config.yaml and fill in your credentials
+# NEVER commit config.yaml to version control!
+
+# Tuya Cloud API credentials
+# Get these from https://iot.tuya.com/ → Cloud → Development → Your Project
+tuya:
+  endpoint: "https://openapi.tuyaeu.com"  # EU endpoint (use tuyaus.com for US)
+  access_id: "your_tuya_access_id"
+  access_key: "your_tuya_access_key"
+  device_id: "your_device_id"
+
+# Telegram Bot credentials
+# Create bot via @BotFather, get chat_id from @userinfobot or getUpdates API
+telegram:
+  bot_token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+  chat_id: "123456789"
+
+# Application settings
+settings:
+  debounce_count: 2          # Consecutive polls needed to confirm state change
+  timezone: "Europe/Kyiv"    # Your local timezone
+
+# AWS settings (for deployment)
+# Get credentials from: IAM Console → Users → Your User → Security credentials → Create access key
+aws:
+  region: "eu-central-1"     # Frankfurt - closest to Kyiv
+  stack_name: "tuya-power-monitor"
+  table_name: "power_watch_state"
+  access_key_id: "AKIA..."         # Your AWS Access Key ID
+  secret_access_key: "your_secret" # Your AWS Secret Access Key

@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Tuya Smart Plug Power Monitor with Telegram Notifications
+
+Parameters:
+  TuyaEndpoint:
+    Type: String
+    Description: Tuya OpenAPI endpoint (e.g., https://openapi.tuyaeu.com)
+    Default: https://openapi.tuyaeu.com
+  
+  TuyaAccessId:
+    Type: String
+    Description: Tuya Cloud Access ID
+    NoEcho: true
+  
+  TuyaAccessKey:
+    Type: String
+    Description: Tuya Cloud Access Key
+    NoEcho: true
+  
+  TuyaDeviceId:
+    Type: String
+    Description: Tuya Device ID to monitor
+  
+  TelegramBotToken:
+    Type: String
+    Description: Telegram Bot Token
+    NoEcho: true
+  
+  TelegramChatId:
+    Type: String
+    Description: Telegram Chat ID
+  
+  DebounceCount:
+    Type: Number
+    Description: Number of consecutive polls required to confirm state change
+    Default: 2
+    MinValue: 1
+    MaxValue: 10
+  
+  Timezone:
+    Type: String
+    Description: Timezone for message timestamps (e.g., Europe/Kyiv, America/New_York)
+    Default: Europe/Kyiv
+  
+  TableName:
+    Type: String
+    Description: DynamoDB table name for state storage
+    Default: power_watch_state
+
+Globals:
+  Function:
+    Timeout: 20
+    MemorySize: 128
+    Runtime: python3.11
+    Tracing: Active
+
+Resources:
+  StateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  PowerMonitorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-power-monitor
+      CodeUri: src/
+      Handler: app.lambda_handler
+      Description: Monitors Tuya smart plug power state and sends Telegram notifications
+      Environment:
+        Variables:
+          TUYA_ENDPOINT: !Ref TuyaEndpoint
+          TUYA_ACCESS_ID: !Ref TuyaAccessId
+          TUYA_ACCESS_KEY: !Ref TuyaAccessKey
+          TUYA_DEVICE_ID: !Ref TuyaDeviceId
+          TG_BOT_TOKEN: !Ref TelegramBotToken
+          TG_CHAT_ID: !Ref TelegramChatId
+          DDB_TABLE: !Ref TableName
+          DEBOUNCE_COUNT: !Ref DebounceCount
+          TIMEZONE: !Ref Timezone
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TableName
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 minute)
+            Description: Poll Tuya device every minute
+            Enabled: true
+
+Outputs:
+  FunctionName:
+    Description: Lambda Function Name
+    Value: !Ref PowerMonitorFunction
+  
+  FunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt PowerMonitorFunction.Arn
+  
+  TableName:
+    Description: DynamoDB Table Name
+    Value: !Ref StateTable
+  
+  ScheduleExpression:
+    Description: Polling Schedule
+    Value: rate(1 minute)

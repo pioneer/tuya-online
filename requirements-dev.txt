@@ -1,0 +1,22 @@
+# Development dependencies for Tuya Power Monitor
+# Install with: pip install -r requirements-dev.txt
+
+# Include runtime dependencies
+-r src/requirements.txt
+
+# Task runner
+invoke>=2.2.0
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.0.0
+moto>=5.0.0              # AWS mocking for DynamoDB tests
+
+# Code quality
+ruff>=0.4.0              # Fast linter and formatter
+mypy>=1.0.0              # Static type checking
+boto3-stubs[dynamodb]    # Type stubs for boto3
+
+# Local development
+pyyaml>=6.0              # Config file parsing
+ipython>=8.0.0           # Better REPL for testing
