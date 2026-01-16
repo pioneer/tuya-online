@@ -38,6 +38,7 @@ def generate_samconfig(config_path: str = None):
         f"TelegramBotToken='{cfg['telegram']['bot_token']}'",
         f"TelegramChatId='{cfg['telegram']['chat_id']}'",
         f"DebounceCount='{cfg.get('settings', {}).get('debounce_count', 2)}'",
+        f"ConfirmationDelayMinutes='{cfg.get('settings', {}).get('confirmation_delay_minutes', 3)}'",
         f"Timezone='{cfg.get('settings', {}).get('timezone', 'Europe/Kyiv')}'",
         f"TableName='{table_name}'",
     ]
@@ -84,6 +85,7 @@ def create_env_json(config_path: str = None):
             "TG_CHAT_ID": str(cfg["telegram"]["chat_id"]),
             "DDB_TABLE": cfg.get("aws", {}).get("table_name", "power_watch_state"),
             "DEBOUNCE_COUNT": str(cfg.get("settings", {}).get("debounce_count", 2)),
+            "CONFIRMATION_DELAY_MINUTES": str(cfg.get("settings", {}).get("confirmation_delay_minutes", 3)),
             "TIMEZONE": cfg.get("settings", {}).get("timezone", "Europe/Kyiv"),
         }
     }

@@ -19,12 +19,18 @@ class DebounceState:
         streak: Number of consecutive polls showing last_observed_online
         last_change_ts: Unix timestamp of last confirmed state change
         last_message_ts: Unix timestamp of last notification sent
+        pending_change_since: Unix timestamp when potential state change was first detected
+                             (debounce threshold reached but waiting for confirmation delay)
+        first_observed_change_ts: Unix timestamp when the current observation streak started
+                                  (when we first saw the new state, for notification timestamp)
     """
     last_confirmed_online: Optional[bool] = None
     last_observed_online: Optional[bool] = None
     streak: int = 0
     last_change_ts: Optional[float] = None
     last_message_ts: Optional[float] = None
+    pending_change_since: Optional[float] = None  # for confirmation delay
+    first_observed_change_ts: Optional[float] = None  # when the change was FIRST observed
     
     def to_dict(self) -> dict:
         """Convert to dictionary for storage."""
@@ -34,33 +40,40 @@ class DebounceState:
 def process_state_change(
     prev_state: DebounceState,
     current_online: bool,
-    debounce_threshold: int
+    debounce_threshold: int,
+    confirmation_delay_seconds: int = 0
 ) -> Tuple[DebounceState, bool]:
     """
     Process a new online status reading and determine if notification should be sent.
     
-    Debouncing logic:
-    - If current reading matches last_observed: increment streak
-    - If current reading differs from last_observed: reset to new observation with streak=1
-    - Confirm state change when:
-      1. We have a previous confirmed state
-      2. Observed state differs from confirmed state
-      3. Streak >= debounce_threshold
+    Two-phase debouncing logic:
+    Phase 1 (debounce): Wait for N consecutive polls showing the same state
+    Phase 2 (confirmation): After debounce threshold reached, wait M more seconds
+                           before confirming. If state reverts during this window,
+                           cancel the pending change (prevents false positives).
+    
+    This handles transient API glitches where Tuya might report offline for ~3 minutes
+    then recover - a real outage would persist beyond the confirmation delay.
     
     Args:
         prev_state: Previous debounce state
         current_online: Current device online status
-        debounce_threshold: Number of consecutive readings required to confirm change
+        debounce_threshold: Number of consecutive readings required to start confirmation
+        confirmation_delay_seconds: Additional seconds to wait after debounce before notifying
         
     Returns:
         Tuple of (new_state, should_notify)
     """
+    now = time.time()
+    
     new_state = DebounceState(
         last_confirmed_online=prev_state.last_confirmed_online,
         last_observed_online=prev_state.last_observed_online,
         streak=prev_state.streak,
         last_change_ts=prev_state.last_change_ts,
-        last_message_ts=prev_state.last_message_ts
+        last_message_ts=prev_state.last_message_ts,
+        pending_change_since=prev_state.pending_change_since,
+        first_observed_change_ts=prev_state.first_observed_change_ts
     )
     
     # Update observation and streak
@@ -71,26 +84,41 @@ def process_state_change(
         # Different observation, reset
         new_state.last_observed_online = current_online
         new_state.streak = 1
+        # Record when we FIRST observed this new state (for notification timestamp)
+        new_state.first_observed_change_ts = now
+        # If we had a pending change and the state reverted, cancel it
+        if prev_state.pending_change_since is not None:
+            new_state.pending_change_since = None
     
     # Check if we should confirm a state change
     should_notify = False
     
+    # State change detection logic (only if we have a confirmed state to compare with)
     if (
         new_state.last_confirmed_online is not None and
         new_state.last_observed_online != new_state.last_confirmed_online and
         new_state.streak >= debounce_threshold
     ):
-        # State change confirmed!
-        new_state.last_confirmed_online = new_state.last_observed_online
-        new_state.last_change_ts = time.time()
-        new_state.last_message_ts = time.time()
-        should_notify = True
+        # Debounce threshold reached - is this a new detection or continuation?
+        if new_state.pending_change_since is None:
+            # New potential state change detected - start confirmation timer
+            new_state.pending_change_since = now
+        
+        # Check if confirmation delay has passed
+        elapsed = now - new_state.pending_change_since
+        if elapsed >= confirmation_delay_seconds:
+            # Confirmation delay passed - state change confirmed!
+            new_state.last_confirmed_online = new_state.last_observed_online
+            new_state.last_change_ts = now
+            new_state.last_message_ts = now
+            new_state.pending_change_since = None  # Clear pending
+            should_notify = True
     
     # Handle initial state (first time we have data)
     elif new_state.last_confirmed_online is None and new_state.streak >= debounce_threshold:
-        # Initial state confirmed
+        # Initial state confirmed (no delay needed for initial state)
         new_state.last_confirmed_online = new_state.last_observed_online
-        new_state.last_change_ts = time.time()
+        new_state.last_change_ts = now
         # Don't notify on initial state establishment
         should_notify = False
     

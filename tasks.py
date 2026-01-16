@@ -153,9 +153,9 @@ def build(ctx):
 
 @task(pre=[init, build])
 def deploy(ctx):
-    """Regenerate config, build, and deploy to AWS."""
+    """Regenerate config, build, and deploy to AWS (auto-confirm)."""
     print("🚀 Deploying to AWS...")
-    run_cmd(ctx, "sam deploy")
+    run_cmd(ctx, "sam deploy --no-confirm-changeset")
 
 
 @task(pre=[init, build])
@@ -170,15 +170,36 @@ def deploy_guided(ctx):
 # =============================================================================
 
 @task
-def logs(ctx, tail=True):
-    """View Lambda function logs."""
+def logs(ctx, tail=False, start_time="", end_time="", filter=""):
+    """
+    View Lambda function logs.
+    
+    Examples:
+        invoke logs --tail              # Live tail logs
+        invoke logs --start-time "2 hours ago"
+        invoke logs --start-time "2026-01-16T08:00:00" --end-time "2026-01-16T10:00:00"
+        invoke logs --start-time "1 hour ago" --filter "notification_sent"
+    """
     from src.config_loader import get_aws_config
     aws_cfg = get_aws_config()
     stack_name = aws_cfg["stack_name"]
     
-    print(f"📋 Tailing logs for {stack_name} (Ctrl+C to exit)...")
-    tail_flag = "--tail" if tail else ""
-    run_cmd(ctx, f"sam logs -n PowerMonitorFunction --stack-name {stack_name} {tail_flag}")
+    cmd = f"sam logs -n PowerMonitorFunction --stack-name {stack_name}"
+    
+    if tail:
+        cmd += " --tail"
+        print(f"📋 Tailing logs for {stack_name} (Ctrl+C to exit)...")
+    else:
+        if start_time:
+            cmd += f" --start-time '{start_time}'"
+        if end_time:
+            cmd += f" --end-time '{end_time}'"
+        print(f"📋 Fetching logs for {stack_name}...")
+    
+    if filter:
+        cmd += f" 2>&1 | grep -A 10 '{filter}'"
+    
+    run_cmd(ctx, cmd)
 
 
 @task

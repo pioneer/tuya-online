@@ -16,6 +16,19 @@ from notifier import TelegramNotifier
 from logic import process_state_change, DebounceState
 
 
+# Ukrainian month names for human-friendly timestamps
+MONTHS_UK = {
+    1: "січня", 2: "лютого", 3: "березня", 4: "квітня",
+    5: "травня", 6: "червня", 7: "липня", 8: "серпня",
+    9: "вересня", 10: "жовтня", 11: "листопада", 12: "грудня"
+}
+
+
+def format_ukrainian_timestamp(dt: datetime) -> str:
+    """Format datetime in Ukrainian human-friendly format."""
+    return f"{dt.day} {MONTHS_UK[dt.month]} {dt.year} о {dt.strftime('%H:%M')}"
+
+
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler invoked by EventBridge schedule every minute.
@@ -40,6 +53,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     tg_chat_id = os.environ["TG_CHAT_ID"]
     ddb_table = os.environ["DDB_TABLE"]
     debounce_count = int(os.environ.get("DEBOUNCE_COUNT", "2"))
+    confirmation_delay_minutes = int(os.environ.get("CONFIRMATION_DELAY_MINUTES", "3"))
     timezone_str = os.environ.get("TIMEZONE", "Europe/Kyiv")
     
     try:
@@ -55,14 +69,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     if event.get("test"):
         print(json.dumps({"event": "test_mode", "test": True}))
         
-        # Format timestamp in Ukrainian
         now = datetime.now(timezone)
-        months_uk = {
-            1: "січня", 2: "лютого", 3: "березня", 4: "квітня",
-            5: "травня", 6: "червня", 7: "липня", 8: "серпня",
-            9: "вересня", 10: "жовтня", 11: "листопада", 12: "грудня"
-        }
-        timestamp_str = f"{now.day} {months_uk[now.month]} {now.year} о {now.strftime('%H:%M')}"
+        timestamp_str = format_ukrainian_timestamp(now)
         
         message = f"🧪 Тестове повідомлення з AWS Lambda\n\n🕐 {timestamp_str}\n\nМоніторинг електроживлення працює!"
         
@@ -105,11 +113,16 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "body": json.dumps({"error": "tuya_api_failed", "message": str(tuya_error)})
             }
         
+        # Save the first_observed_change_ts BEFORE processing (we need it for the timestamp)
+        # This is when the state change was FIRST detected (streak=1)
+        prev_first_observed_change_ts = prev_state.get("first_observed_change_ts")
+        
         # Step 3: Apply debouncing and state transition logic
         new_state, should_notify = process_state_change(
             prev_state=DebounceState(**prev_state),
             current_online=device_online,
-            debounce_threshold=debounce_count
+            debounce_threshold=debounce_count,
+            confirmation_delay_seconds=confirmation_delay_minutes * 60
         )
         
         new_state_dict = new_state.to_dict()
@@ -122,18 +135,15 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Step 4: Send notification if state changed
         notification_sent = False
         if should_notify:
-            # Format timestamp in Ukrainian
-            now = datetime.now(timezone)
-            months_uk = {
-                1: "січня", 2: "лютого", 3: "березня", 4: "квітня",
-                5: "травня", 6: "червня", 7: "липня", 8: "серпня",
-                9: "вересня", 10: "жовтня", 11: "листопада", 12: "грудня"
-            }
-            day = now.day
-            month = months_uk[now.month]
-            year = now.year
-            time_str = now.strftime("%H:%M")
-            timestamp_str = f"{day} {month} {year} о {time_str}"
+            # Use the timestamp when the change was FIRST observed (streak=1)
+            # This shows when the outage actually started, not when it was confirmed
+            if prev_first_observed_change_ts is not None:
+                event_time = datetime.fromtimestamp(prev_first_observed_change_ts, tz=timezone)
+            else:
+                # Fallback to now if no timestamp (shouldn't happen)
+                event_time = datetime.now(timezone)
+            
+            timestamp_str = format_ukrainian_timestamp(event_time)
             
             if new_state.last_confirmed_online:
                 message = f"✅ Електрику увімкнено!\n\n🕐 {timestamp_str}"
@@ -146,7 +156,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 print(json.dumps({
                     "event": "notification_sent",
                     "message": message,
-                    "timestamp": timestamp_str
+                    "event_timestamp": timestamp_str,
+                    "first_observed_at": prev_first_observed_change_ts
                 }))
             except Exception as notif_error:
                 print(json.dumps({

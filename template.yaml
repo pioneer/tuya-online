@@ -36,7 +36,14 @@ Parameters:
     Description: Number of consecutive polls required to confirm state change
     Default: 2
     MinValue: 1
-    MaxValue: 10
+    MaxValue: 30
+  
+  ConfirmationDelayMinutes:
+    Type: Number
+    Description: Additional minutes to wait after debounce before sending notification (prevents false positives from transient API glitches)
+    Default: 3
+    MinValue: 0
+    MaxValue: 30
   
   Timezone:
     Type: String
@@ -87,6 +94,7 @@ Resources:
           TG_CHAT_ID: !Ref TelegramChatId
           DDB_TABLE: !Ref TableName
           DEBOUNCE_COUNT: !Ref DebounceCount
+          CONFIRMATION_DELAY_MINUTES: !Ref ConfirmationDelayMinutes
           TIMEZONE: !Ref Timezone
       Policies:
         - DynamoDBCrudPolicy:
