@@ -1,0 +1,27 @@
+# Ruff configuration for Tuya Power Monitor
+
+[format]
+# Use double quotes
+quote-style = "double"
+# Indent with spaces
+indent-style = "space"
+# Line length
+line-length = 100
+
+[lint]
+# Enable common rules
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort (import sorting)
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[lint.isort]
+known-first-party = ["src"]

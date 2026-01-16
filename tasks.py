@@ -74,6 +74,69 @@ def aws_configure(ctx):
 
 
 # =============================================================================
+# Code Quality Tasks
+# =============================================================================
+
+@task
+def format(ctx, files=""):
+    """
+    Format code with ruff.
+    
+    Examples:
+        invoke format                    # Format all code
+        invoke format --files src/app.py # Format specific file
+        invoke format --files "src/ tests/"  # Format specific directories
+    """
+    if files:
+        targets = files
+        print(f"✨ Formatting: {targets}")
+    else:
+        targets = "src/ tests/ scripts/ tasks.py"
+        print("✨ Formatting all code...")
+    
+    run_cmd(ctx, f"ruff format {targets}")
+    run_cmd(ctx, f"ruff check --fix --select I {targets}")  # Also fix import sorting
+
+
+@task
+def lint(ctx, files=""):
+    """
+    Run linter (ruff).
+    
+    Examples:
+        invoke lint                    # Lint all code
+        invoke lint --files src/app.py # Lint specific file
+    """
+    if files:
+        targets = files
+        print(f"🔍 Linting: {targets}")
+    else:
+        targets = "src/ tests/ scripts/ tasks.py"
+        print("🔍 Running linter...")
+    
+    run_cmd(ctx, f"ruff check {targets}")
+
+
+@task
+def lint_fix(ctx, files=""):
+    """
+    Run linter and fix issues.
+    
+    Examples:
+        invoke lint-fix                    # Fix all code
+        invoke lint-fix --files src/app.py # Fix specific file
+    """
+    if files:
+        targets = files
+        print(f"🔧 Fixing: {targets}")
+    else:
+        targets = "src/ tests/ scripts/ tasks.py"
+        print("🔧 Running linter with auto-fix...")
+    
+    run_cmd(ctx, f"ruff check --fix {targets}")
+
+
+# =============================================================================
 # Local Testing Tasks
 # =============================================================================
 
