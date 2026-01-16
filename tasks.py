@@ -31,6 +31,7 @@ def run_cmd(ctx, cmd, **kwargs):
 # Setup Tasks
 # =============================================================================
 
+
 @task
 def install(ctx):
     """Install development dependencies."""
@@ -70,18 +71,22 @@ def venv_clean(ctx):
 def aws_configure(ctx):
     """Configure AWS CLI from config.yaml."""
     python = get_venv_python()
-    run_cmd(ctx, f'{python} -c "import sys; sys.path.insert(0, \'src\'); from config_loader import configure_aws_cli; configure_aws_cli()"')
+    run_cmd(
+        ctx,
+        f"{python} -c \"import sys; sys.path.insert(0, 'src'); from config_loader import configure_aws_cli; configure_aws_cli()\"",
+    )
 
 
 # =============================================================================
 # Code Quality Tasks
 # =============================================================================
 
+
 @task
 def format(ctx, files=""):
     """
     Format code with ruff.
-    
+
     Examples:
         invoke format                    # Format all code
         invoke format --files src/app.py # Format specific file
@@ -93,7 +98,7 @@ def format(ctx, files=""):
     else:
         targets = "src/ tests/ scripts/ tasks.py"
         print("✨ Formatting all code...")
-    
+
     run_cmd(ctx, f"ruff format {targets}")
     run_cmd(ctx, f"ruff check --fix --select I {targets}")  # Also fix import sorting
 
@@ -102,7 +107,7 @@ def format(ctx, files=""):
 def lint(ctx, files=""):
     """
     Run linter (ruff).
-    
+
     Examples:
         invoke lint                    # Lint all code
         invoke lint --files src/app.py # Lint specific file
@@ -113,7 +118,7 @@ def lint(ctx, files=""):
     else:
         targets = "src/ tests/ scripts/ tasks.py"
         print("🔍 Running linter...")
-    
+
     run_cmd(ctx, f"ruff check {targets}")
 
 
@@ -121,7 +126,7 @@ def lint(ctx, files=""):
 def lint_fix(ctx, files=""):
     """
     Run linter and fix issues.
-    
+
     Examples:
         invoke lint-fix                    # Fix all code
         invoke lint-fix --files src/app.py # Fix specific file
@@ -132,13 +137,69 @@ def lint_fix(ctx, files=""):
     else:
         targets = "src/ tests/ scripts/ tasks.py"
         print("🔧 Running linter with auto-fix...")
-    
+
     run_cmd(ctx, f"ruff check --fix {targets}")
+
+
+# =============================================================================
+# Git Hooks
+# =============================================================================
+
+
+@task
+def install_hooks(ctx):
+    """Install Git pre-commit hooks."""
+    hooks_dir = PROJECT_ROOT / ".git" / "hooks"
+
+    if not hooks_dir.exists():
+        print("❌ Not a Git repository. Run 'git init' first.")
+        return
+
+    pre_commit_hook = hooks_dir / "pre-commit"
+    hook_content = """#!/bin/bash
+# Auto-generated pre-commit hook
+# Checks Python code formatting before commit
+
+# Find Python interpreter
+if [ -f ".venv/bin/python" ]; then
+    PYTHON=".venv/bin/python"
+else
+    PYTHON="python3"
+fi
+
+# Run the pre-commit script
+$PYTHON scripts/pre_commit.py
+exit $?
+"""
+
+    with open(pre_commit_hook, "w") as f:
+        f.write(hook_content)
+
+    pre_commit_hook.chmod(0o755)
+
+    print("✅ Git pre-commit hook installed")
+    print("   Hook location: .git/hooks/pre-commit")
+    print()
+    print("The hook will check Python formatting before each commit.")
+    print("To bypass (not recommended): git commit --no-verify")
+
+
+@task
+def uninstall_hooks(ctx):
+    """Remove Git pre-commit hooks."""
+    pre_commit_hook = PROJECT_ROOT / ".git" / "hooks" / "pre-commit"
+
+    if pre_commit_hook.exists():
+        pre_commit_hook.unlink()
+        print("✅ Git pre-commit hook removed")
+    else:
+        print("ℹ️  No pre-commit hook found")
 
 
 # =============================================================================
 # Local Testing Tasks
 # =============================================================================
+
 
 @task
 def test(ctx):
@@ -186,6 +247,7 @@ def poll(ctx):
 # Build & Deploy Tasks
 # =============================================================================
 
+
 @task
 def init(ctx):
     """Generate SAM configuration from config.yaml."""
@@ -232,11 +294,12 @@ def deploy_guided(ctx):
 # AWS Operations Tasks
 # =============================================================================
 
+
 @task
 def logs(ctx, tail=False, start_time="", end_time="", filter=""):
     """
     View Lambda function logs.
-    
+
     Examples:
         invoke logs --tail              # Live tail logs
         invoke logs --start-time "2 hours ago"
@@ -244,11 +307,12 @@ def logs(ctx, tail=False, start_time="", end_time="", filter=""):
         invoke logs --start-time "1 hour ago" --filter "notification_sent"
     """
     from src.config_loader import get_aws_config
+
     aws_cfg = get_aws_config()
     stack_name = aws_cfg["stack_name"]
-    
+
     cmd = f"sam logs -n PowerMonitorFunction --stack-name {stack_name}"
-    
+
     if tail:
         cmd += " --tail"
         print(f"📋 Tailing logs for {stack_name} (Ctrl+C to exit)...")
@@ -258,10 +322,10 @@ def logs(ctx, tail=False, start_time="", end_time="", filter=""):
         if end_time:
             cmd += f" --end-time '{end_time}'"
         print(f"📋 Fetching logs for {stack_name}...")
-    
+
     if filter:
         cmd += f" 2>&1 | grep -A 10 '{filter}'"
-    
+
     run_cmd(ctx, cmd)
 
 
@@ -269,17 +333,19 @@ def logs(ctx, tail=False, start_time="", end_time="", filter=""):
 def check_state(ctx):
     """Check current state in DynamoDB."""
     from src.config_loader import get_aws_config
+
     aws_cfg = get_aws_config()
     table_name = aws_cfg["table_name"]
-    
+
     print(f"📊 Checking state in DynamoDB table: {table_name}")
     result = ctx.run(
         f'aws dynamodb get-item --table-name {table_name} --key \'{{"pk":{{"S":"state"}}}}\' --output json',
         hide=True,
-        warn=True
+        warn=True,
     )
     if result.ok and result.stdout.strip():
         import json
+
         data = json.loads(result.stdout)
         print(json.dumps(data, indent=2))
     else:
@@ -290,12 +356,15 @@ def check_state(ctx):
 def invoke_remote(ctx):
     """Invoke Lambda function remotely."""
     from src.config_loader import get_aws_config
+
     aws_cfg = get_aws_config()
     stack_name = aws_cfg["stack_name"]
     function_name = f"{stack_name}-power-monitor"
-    
+
     print(f"⚡ Invoking Lambda function: {function_name}")
-    run_cmd(ctx, f"aws lambda invoke --function-name {function_name} --payload '{{}}' response.json")
+    run_cmd(
+        ctx, f"aws lambda invoke --function-name {function_name} --payload '{{}}' response.json"
+    )
     print()
     print("📄 Response:")
     run_cmd(ctx, "cat response.json && echo")
@@ -305,15 +374,20 @@ def invoke_remote(ctx):
 def test_remote(ctx):
     """Send a test notification from the deployed Lambda."""
     from src.config_loader import get_aws_config
+
     aws_cfg = get_aws_config()
     stack_name = aws_cfg["stack_name"]
     function_name = f"{stack_name}-power-monitor"
-    
+
     print(f"🧪 Sending test notification from Lambda: {function_name}")
     # Use base64 encoding for the payload to avoid shell escaping issues
     import base64
+
     payload = base64.b64encode(b'{"test": true}').decode()
-    run_cmd(ctx, f"aws lambda invoke --function-name {function_name} --payload '{payload}' --cli-binary-format base64 response.json")
+    run_cmd(
+        ctx,
+        f"aws lambda invoke --function-name {function_name} --payload '{payload}' --cli-binary-format base64 response.json",
+    )
     print()
     print("📄 Response:")
     run_cmd(ctx, "cat response.json && echo")
@@ -331,32 +405,33 @@ def invoke_local(ctx):
 # Cleanup Tasks
 # =============================================================================
 
+
 @task
 def clean(ctx):
     """Remove build artifacts."""
     print("🧹 Cleaning build artifacts...")
-    
+
     # Remove .aws-sam directory
     aws_sam = PROJECT_ROOT / ".aws-sam"
     if aws_sam.exists():
         shutil.rmtree(aws_sam)
         print("   Removed .aws-sam/")
-    
+
     # Remove __pycache__ directories
     for pycache in PROJECT_ROOT.rglob("__pycache__"):
         shutil.rmtree(pycache)
         print(f"   Removed {pycache.relative_to(PROJECT_ROOT)}/")
-    
+
     # Remove .pyc files
     for pyc in PROJECT_ROOT.rglob("*.pyc"):
         pyc.unlink()
-    
+
     # Remove response.json
     response_json = PROJECT_ROOT / "response.json"
     if response_json.exists():
         response_json.unlink()
         print("   Removed response.json")
-    
+
     print("✅ Clean complete")
 
 
@@ -364,14 +439,14 @@ def clean(ctx):
 def clean_all(ctx):
     """Remove all generated files (build artifacts + config)."""
     clean(ctx)
-    
+
     files_to_remove = ["samconfig.toml", "env.json"]
     for filename in files_to_remove:
         filepath = PROJECT_ROOT / filename
         if filepath.exists():
             filepath.unlink()
             print(f"   Removed {filename}")
-    
+
     print("✅ Full clean complete")
 
 
@@ -385,6 +460,7 @@ def delete(ctx):
 # =============================================================================
 # Code Quality Tasks
 # =============================================================================
+
 
 @task
 def lint(ctx):
@@ -404,7 +480,7 @@ def lint_fix(ctx):
 def format(ctx):
     """Format code (ruff format)."""
     print("✨ Formatting code...")
-    run_cmd(ctx, "ruff format src/ tests/ scripts/")
+    run_cmd(ctx, "ruff format tasks.py src/ tests/ scripts/")
 
 
 @task
