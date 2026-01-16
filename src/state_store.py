@@ -10,29 +10,29 @@ from decimal import Decimal
 
 class StateStore:
     """DynamoDB-backed state persistence."""
-    
+
     STATE_PK = "state"
-    
+
     def __init__(self, table_name: str):
         """
         Initialize state store.
-        
+
         Args:
             table_name: DynamoDB table name
         """
         self.dynamodb = boto3.resource("dynamodb")
         self.table = self.dynamodb.Table(table_name)
-    
+
     def load_state(self) -> Dict[str, Any]:
         """
         Load state from DynamoDB.
-        
+
         Returns:
             State dictionary with default values if not found
         """
         try:
             response = self.table.get_item(Key={"pk": self.STATE_PK})
-            
+
             if "Item" in response:
                 item = response["Item"]
                 # Convert DynamoDB types to Python types
@@ -44,11 +44,11 @@ class StateStore:
             print(f"Error loading state from DynamoDB: {e}")
             # Return default state on error
             return self._default_state()
-    
+
     def save_state(self, state: Dict[str, Any]) -> None:
         """
         Save state to DynamoDB.
-        
+
         Args:
             state: State dictionary to persist
         """
@@ -56,7 +56,7 @@ class StateStore:
         # Convert floats to Decimal for DynamoDB
         item = self._serialize_item(item)
         self.table.put_item(Item=item)
-    
+
     @staticmethod
     def _default_state() -> Dict[str, Any]:
         """Return default initial state."""
@@ -65,9 +65,9 @@ class StateStore:
             "last_observed_online": None,
             "streak": 0,
             "last_change_ts": None,
-            "last_message_ts": None
+            "last_message_ts": None,
         }
-    
+
     @staticmethod
     def _serialize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         """Convert Python types to DynamoDB types."""
@@ -80,7 +80,7 @@ class StateStore:
             else:
                 serialized[key] = value
         return serialized
-    
+
     @staticmethod
     def _deserialize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         """Convert DynamoDB types to Python types."""

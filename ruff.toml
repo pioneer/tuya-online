@@ -1,12 +1,13 @@
 # Ruff configuration for Tuya Power Monitor
 
+# Line length (applies to both formatter and linter)
+line-length = 100
+
 [format]
 # Use double quotes
 quote-style = "double"
 # Indent with spaces
 indent-style = "space"
-# Line length
-line-length = 100
 
 [lint]
 # Enable common rules
