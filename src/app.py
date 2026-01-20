@@ -38,6 +38,51 @@ def format_ukrainian_timestamp(dt: datetime) -> str:
     return f"{dt.day} {MONTHS_UK[dt.month]} {dt.year} о {dt.strftime('%H:%M')}"
 
 
+def format_ukrainian_duration(seconds: float) -> str:
+    """
+    Format duration in Ukrainian.
+
+    Args:
+        seconds: Duration in seconds
+
+    Returns:
+        Formatted string like "2 години 15 хвилин" or "45 хвилин" or "3 дні 5 годин"
+    """
+    total_seconds = int(seconds)
+
+    days = total_seconds // 86400
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+
+    parts = []
+
+    if days > 0:
+        if days == 1:
+            parts.append("1 день")
+        elif 2 <= days <= 4:
+            parts.append(f"{days} дні")
+        else:
+            parts.append(f"{days} днів")
+
+    if hours > 0:
+        if hours == 1:
+            parts.append("1 година")
+        elif 2 <= hours <= 4:
+            parts.append(f"{hours} години")
+        else:
+            parts.append(f"{hours} годин")
+
+    if minutes > 0 or not parts:  # Show minutes if nothing else or if > 0
+        if minutes == 1:
+            parts.append("1 хвилина")
+        elif 2 <= minutes <= 4:
+            parts.append(f"{minutes} хвилини")
+        else:
+            parts.append(f"{minutes} хвилин")
+
+    return " ".join(parts)
+
+
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler invoked by EventBridge schedule every minute.
@@ -173,6 +218,16 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
             if new_state.last_confirmed_online:
                 message = f"✅ Електрику увімкнено!\n\n🕐 {timestamp_str}"
+                # Add outage duration if we know when it went offline
+                if new_state.last_confirmed_offline_ts is not None:
+                    # Use first_observed_change_ts (when we first detected power came back)
+                    # to calculate duration from when power first went offline
+                    duration_seconds = (
+                        prev_first_observed_change_ts - new_state.last_confirmed_offline_ts
+                    )
+                    if duration_seconds > 0:
+                        duration_str = format_ukrainian_duration(duration_seconds)
+                        message += f"\n⏱️ Тривалість відключення: {duration_str}"
             else:
                 message = f"❌ Електрику вимкнено\n\n🕐 {timestamp_str}"
 

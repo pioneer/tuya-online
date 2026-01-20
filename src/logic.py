@@ -23,6 +23,8 @@ class DebounceState:
                              (debounce threshold reached but waiting for confirmation delay)
         first_observed_change_ts: Unix timestamp when the current observation streak started
                                   (when we first saw the new state, for notification timestamp)
+        last_confirmed_offline_ts: Unix timestamp when power was last confirmed offline
+                                   (for calculating outage duration when power is restored)
     """
 
     last_confirmed_online: Optional[bool] = None
@@ -32,6 +34,7 @@ class DebounceState:
     last_message_ts: Optional[float] = None
     pending_change_since: Optional[float] = None  # for confirmation delay
     first_observed_change_ts: Optional[float] = None  # when the change was FIRST observed
+    last_confirmed_offline_ts: Optional[float] = None  # for outage duration calculation
 
     def to_dict(self) -> dict:
         """Convert to dictionary for storage."""
@@ -75,6 +78,7 @@ def process_state_change(
         last_message_ts=prev_state.last_message_ts,
         pending_change_since=prev_state.pending_change_since,
         first_observed_change_ts=prev_state.first_observed_change_ts,
+        last_confirmed_offline_ts=prev_state.last_confirmed_offline_ts,
     )
 
     # Update observation and streak
@@ -114,6 +118,9 @@ def process_state_change(
             new_state.last_message_ts = now
             new_state.pending_change_since = None  # Clear pending
             should_notify = True
+            # Track when power went offline (for duration calculation when restored)
+            if not new_state.last_observed_online:
+                new_state.last_confirmed_offline_ts = new_state.first_observed_change_ts
 
     # Handle initial state (first time we have data)
     elif new_state.last_confirmed_online is None and new_state.streak >= debounce_threshold:
