@@ -180,9 +180,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "body": json.dumps({"error": "tuya_api_failed", "message": str(tuya_error)}),
             }
 
-        # Save the first_observed_change_ts BEFORE processing (we need it for the timestamp)
-        # This is when the state change was FIRST detected (streak=1)
+        # Save timestamps BEFORE processing (we need them for notifications)
+        # first_observed_change_ts is when the state change was FIRST detected (streak=1)
         prev_first_observed_change_ts = prev_state.get("first_observed_change_ts")
+        prev_last_confirmed_online_ts = prev_state.get("last_confirmed_online_ts")
+        prev_last_confirmed_offline_ts = prev_state.get("last_confirmed_offline_ts")
 
         # Step 3: Apply debouncing and state transition logic
         new_state, should_notify = process_state_change(
@@ -219,17 +221,23 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if new_state.last_confirmed_online:
                 message = f"✅ Електрику увімкнено!\n\n🕐 {timestamp_str}"
                 # Add outage duration if we know when it went offline
-                if new_state.last_confirmed_offline_ts is not None:
-                    # Use first_observed_change_ts (when we first detected power came back)
-                    # to calculate duration from when power first went offline
+                if prev_last_confirmed_offline_ts is not None:
+                    # Calculate duration from when power went offline to when it came back
                     duration_seconds = (
-                        prev_first_observed_change_ts - new_state.last_confirmed_offline_ts
+                        prev_first_observed_change_ts - prev_last_confirmed_offline_ts
                     )
                     if duration_seconds > 0:
                         duration_str = format_ukrainian_duration(duration_seconds)
                         message += f"\n⏱️ Тривалість відключення: {duration_str}"
             else:
                 message = f"❌ Електрику вимкнено\n\n🕐 {timestamp_str}"
+                # Add uptime duration if we know when power came on
+                if prev_last_confirmed_online_ts is not None:
+                    # Calculate duration from when power came on to when it went off
+                    duration_seconds = prev_first_observed_change_ts - prev_last_confirmed_online_ts
+                    if duration_seconds > 0:
+                        duration_str = format_ukrainian_duration(duration_seconds)
+                        message += f"\n⏱️ Електрика була: {duration_str}"
 
             try:
                 notifier.send_message(message)

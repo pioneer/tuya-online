@@ -6,8 +6,24 @@ Checks that Python code is properly formatted before committing.
 Install with: invoke install-hooks
 """
 
+import os
 import subprocess
 import sys
+
+# Get uv path - check common locations
+UV_PATH = None
+for path in [
+    os.path.expanduser("~/.local/bin/uv"),
+    "/usr/local/bin/uv",
+    "/usr/bin/uv",
+]:
+    if os.path.isfile(path):
+        UV_PATH = path
+        break
+
+if UV_PATH is None:
+    # Fallback to PATH
+    UV_PATH = "uv"
 
 
 def main():
@@ -29,9 +45,9 @@ def main():
 
     print(f"   Checking {len(staged_files)} Python file(s)...")
 
-    # Check formatting with ruff
+    # Check formatting with ruff (using uv to ensure ruff is available)
     format_result = subprocess.run(
-        ["ruff", "format", "--check"] + staged_files,
+        [UV_PATH, "run", "ruff", "format", "--check"] + staged_files,
         capture_output=True,
         text=True,
     )
@@ -48,7 +64,7 @@ def main():
 
     # Check linting with ruff (warn only, don't block)
     lint_result = subprocess.run(
-        ["ruff", "check"] + staged_files,
+        [UV_PATH, "run", "ruff", "check"] + staged_files,
         capture_output=True,
         text=True,
     )
